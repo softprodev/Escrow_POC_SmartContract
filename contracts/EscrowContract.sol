@@ -120,7 +120,107 @@ interface CEth {
     function redeemUnderlying(uint) external returns (uint);
     function balanceOfUnderlying(address) external returns (uint);
 }
+contract testEscrow is RandomNumArray, Ownable {
+    struct EscrowStruct
+    {    
+        uint escrowID;
+        address buyer;
+        uint[] buyerRandomArray;
+        bool[] buyerRandomArrayIsRedeemed;
+        address[] sellerAddress;
+        uint amount;
+        uint redeemAmountPerNumber;
+        uint createdDate;
+        bool isActive;           
+    }
 
+    struct SellerStruct
+    {    
+        uint escrowID;
+        address seller;
+        uint[] sellerRandomArray;
+        uint createdDate;
+        uint redeemedAmount; 
+    }
+
+    mapping(address => EscrowStruct[]) public buyerDatabase;
+    mapping(address => SellerStruct[]) public sellerDatabase;
+
+    EscrowStruct[] public escrowArray;
+    SellerStruct[] public sellerArray;
+    uint public escrowCount;
+
+    constructor(){
+        escrowCount = 0;
+    }
+    function getCurrentTimeStamp() public view returns(uint){
+        return block.timestamp;
+    }
+
+    function createNewEscrow(uint[] memory _buyerRandomArray) public payable{
+        require(msg.value == 1000000000000000000, "Fund should be 1000000000000000000 wei = 1 ETH");
+        require(_buyerRandomArray.length == 10, "Random Array size should be 10.");
+        // require(msg.value == 10, "Fund should be 10 wei");
+        // require(msg.value == 10000000000000000000, "Fund should be 10 wei");
+        EscrowStruct memory newEscrow;
+        newEscrow.escrowID = escrowCount;
+        escrowCount = escrowCount + 1;
+        newEscrow.buyer = msg.sender;
+        newEscrow.amount = msg.value;
+        newEscrow.buyerRandomArray = _buyerRandomArray;
+        bool[] memory _buyerRandomArrayIsRedeemed = new bool[](_buyerRandomArray.length);
+        newEscrow.buyerRandomArrayIsRedeemed = _buyerRandomArrayIsRedeemed;
+        newEscrow.redeemAmountPerNumber = msg.value/_buyerRandomArray.length;
+        newEscrow.createdDate = getCurrentTimeStamp();
+        newEscrow.isActive = true;
+        escrowArray.push(newEscrow);
+
+        buyerDatabase[msg.sender].push(newEscrow);
+    }
+
+    function addNewSeller(uint _escrowID,uint[] memory _sellerRandomArray) public payable returns(string memory){
+
+        (address buyeraddress, bool isExist) = getBuyerAddressByEscrowID(_escrowID);
+        require(isExist, "EscrowID is invaild");
+        SellerStruct memory newSeller;
+        newSeller.escrowID = _escrowID;
+        newSeller.sellerRandomArray = _sellerRandomArray;
+        newSeller.createdDate = getCurrentTimeStamp();
+        newSeller.seller = msg.sender;
+        uint[] memory matchedRandomNumbers = getMatchedRandomNumbers(_escrowID,_sellerRandomArray);
+
+        uint index = getBuyerDataBaseIndexByAddress(buyeraddress, _escrowID);
+
+        uint _redeemedAmount = matchedRandomNumbers.length*buyerDatabase[buyeraddress][index].redeemAmountPerNumber;
+        newSeller.redeemedAmount = _redeemedAmount;
+        sellerArray.push(newSeller);
+
+        sellerDatabase[msg.sender].push(newSeller);
+        payable(msg.sender).transfer(_redeemedAmount);
+
+        string memory result;
+        if (matchedRandomNumbers.length == 0 ) {
+            result = "No Match Found";
+        }else{
+            result = "Match Found :";
+            for (uint i = 0; i<matchedRandomNumbers.length; i++){
+                result = append(result,"#",Strings.toString(matchedRandomNumbers[i]), " ,");
+            }
+        }
+        return result;
+    }
+
+    function append(string memory a, string memory b, string memory c, string memory d) internal pure returns (string memory) {
+        return string(abi.encodePacked(a, b, c, d));
+    }
+
+    function getRedeemedAmountPerNumberByEscrowID(uint _escrowID) public view returns(uint){
+        (address buyeraddress, bool isExist) = getBuyerAddressByEscrowID(_escrowID);
+        require(isExist, "EscrowID is invaild");
+        uint index = getBuyerDataBaseIndexByAddress(buyeraddress, _escrowID);
+        return buyerDatabase[buyeraddress][index].redeemAmountPerNumber;
+    }
+}
 contract EscrowCompound is Ownable {
 
     event Initiated(string referenceId, address payer, uint256 amount, address payee, address trustedParty, uint256 lastBlock);
