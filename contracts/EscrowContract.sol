@@ -220,6 +220,102 @@ contract testEscrow is RandomNumArray, Ownable {
         uint index = getBuyerDataBaseIndexByAddress(buyeraddress, _escrowID);
         return buyerDatabase[buyeraddress][index].redeemAmountPerNumber;
     }
+
+    function getMatchedCount(uint _escrowID, uint[] memory _sellerRandomArray) public view returns(uint){    
+        (uint[] memory buyerRandomArray, bool[] memory buyerRandomArrayIsRedeemed, bool isExist) = getBuyerRandomArrayByEscrowID(_escrowID);
+        require(isExist, "EscrowID is invaild");
+        uint matchedCount = 0;
+        for (uint i = 0; i < buyerRandomArray.length; i++)
+        {
+            for (uint j = 0; j < _sellerRandomArray.length; j++)
+            {
+                if (buyerRandomArray[i] == _sellerRandomArray[j]){
+                    if (buyerRandomArrayIsRedeemed[i] != true){
+                         matchedCount += 1;
+                    }
+                }
+            }
+        }
+        return matchedCount;
+    }
+
+    function getMatchedNumbers(uint _escrowID, uint[] memory _sellerRandomArray) public returns(uint[] memory){   
+
+        (uint[] memory buyerRandomArray, bool[] memory buyerRandomArrayIsRedeemed, bool isExist) = getBuyerRandomArrayByEscrowID(_escrowID);
+        require(isExist, "EscrowID is invaild");
+
+        uint matchedCount = getMatchedCount(_escrowID, _sellerRandomArray);
+        uint[] memory matchedRandomArray = new uint[](matchedCount);
+        uint matchedCounttemp = 0;
+
+        for (uint i = 0; i < buyerRandomArray.length; i++)
+        {
+            for (uint j = 0; j < _sellerRandomArray.length; j++)
+            {
+                if (buyerRandomArray[i] == _sellerRandomArray[j]){
+                    if (buyerRandomArrayIsRedeemed[i] != true){
+                        escrowArray[_escrowID].buyerRandomArrayIsRedeemed[i] = true;
+                        (address buyerAddress,) = getBuyerAddressByEscrowID(_escrowID);
+                        uint index = getBuyerDataBaseIndexByAddress(buyerAddress, _escrowID);
+                        buyerDatabase[buyerAddress][index].buyerRandomArrayIsRedeemed[i] = true;
+                        matchedRandomArray[matchedCounttemp] = buyerRandomArray[i];
+                        matchedCounttemp += 1;
+                    }
+                }
+            }
+        }
+        return matchedRandomArray;
+    }
+
+    function getBuyerDataBaseIndexByAddress(address _buyerAddress, uint _escrowID) public view returns(uint){
+        uint index = 0;
+        for (uint i = 0; i < buyerDatabase[_buyerAddress].length; i++){
+            if (buyerDatabase[_buyerAddress][i].escrowID == _escrowID){
+                index = i;
+            }
+        }
+        return index;
+    }
+
+    function getBuyerAddressByEscrowID(uint _escrowID) public view returns(address, bool){
+        bool isExist = false;
+        address buyerAddress;
+        for (uint i = 0; i < escrowArray.length; i++)
+        {
+            if (escrowArray[i].escrowID == _escrowID){
+                buyerAddress = escrowArray[i].buyer;
+                isExist = true;
+            }
+        }
+        return (buyerAddress, isExist);
+    }
+
+    function getBuyerByEscrowID(uint _escrowID) public view returns(uint[] memory,bool[] memory, bool){
+        (address buyerAddress,bool isExist) = getBuyerAddressByEscrowID(_escrowID);
+        require(isExist, "EscrowID is invaild");
+        uint[] memory buyerRandomArray;
+        bool[] memory buyerRandomArrayIsRedeemed;
+        bool isExistInBuyerDatabase = false;
+
+        for (uint i = 0; i < buyerDatabase[buyerAddress].length; i++){
+            if (buyerDatabase[buyerAddress][i].escrowID == _escrowID){
+                buyerRandomArray = buyerDatabase[buyerAddress][i].buyerRandomArray;
+                buyerRandomArrayIsRedeemed = buyerDatabase[buyerAddress][i].buyerRandomArrayIsRedeemed;
+                isExistInBuyerDatabase = true;
+            }
+        }
+        
+        return (buyerRandomArray, buyerRandomArrayIsRedeemed,isExistInBuyerDatabase);
+    }
+
+    function getEscrowArray() public view returns(EscrowStruct[] memory){
+        return escrowArray;
+    }
+
+    function getSellerArray() public view returns(SellerStruct[] memory){
+        return sellerArray;
+    }
+
 }
 contract EscrowCompound is Ownable {
 
