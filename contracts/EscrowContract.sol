@@ -317,6 +317,122 @@ contract testEscrow is RandomNumArray, Ownable {
     }
 
 }
+
+
+contract POCEscrow is RandomNumArray, Ownable {
+    //Version:  v1.0
+       
+    address public admin;
+
+    
+    //Each buyer address consist of an array of EscrowStruct
+    //Used to store buyer's transactions and for buyers to interact with his transactions. (Such as releasing funds to seller)
+    struct EscrowStruct
+    {    
+        address buyer;          //Person who is making payment
+        address seller;         //Person who will receive funds
+        address escrow_agent;   //Escrow agent to resolve disputes, if any
+                                    
+        uint escrow_fee;        //Fee charged by escrow
+        uint amount;            //Amount of Ether (in Wei) seller will receive after fees
+
+        bool escrow_intervention; //Buyer or Seller can call for Escrow intervention
+        bool release_approval;   //Buyer or Escrow(if escrow_intervention is true) can approve release of funds to seller
+        bool refund_approval;    //Seller or Escrow(if escrow_intervention is true) can approve refund of funds to buyer 
+
+        bytes32 notes;             //Notes for Seller
+        
+    }
+
+    struct TransactionStruct
+    {                        
+        //Links to transaction from buyer
+        address buyer;          //Person who is making payment
+        uint buyer_nounce;         //Nounce of buyer transaction                            
+    }
+
+
+    
+    //Database of Buyers. Each buyer then contain an array of his transactions
+    mapping(address => EscrowStruct[]) public buyerDatabase;
+
+    //Database of Seller and Escrow Agent
+    mapping(address => TransactionStruct[]) public sellerDatabase;       
+    mapping(address => TransactionStruct[]) public escrowDatabase;
+            
+    //Every address have a Funds bank. All refunds, sales and escrow comissions are sent to this bank. Address owner can withdraw them at any time.
+    mapping(address => uint) public Funds;
+
+    mapping(address => uint) public escrowFee;
+
+
+    //Constructor. Set contract creator/admin
+    constructor() {
+        admin = msg.sender;
+    }
+
+    function fundAccount(address sender_)  public payable
+    {
+        //LogFundsReceived(msg.sender, msg.value);
+        // Add funds to the sender's account
+        Funds[sender_] += msg.value;   
+        
+    }
+
+    function setEscrowFee(uint fee) external{
+
+        //Allowed fee range: 0.1% to 10%, in increments of 0.1%
+        require (fee >= 1 && fee <= 100);
+        escrowFee[msg.sender] = fee;
+    }
+
+    function getEscrowFee(address escrowAddress) internal view returns (uint) {
+        return (escrowFee[escrowAddress]);
+    }
+
+    
+    function newEscrowTransaction(address sellerAddress, address escrowAddress, bytes32 notes) public payable returns (bool) {
+
+        require(msg.value > 0 && msg.sender != escrowAddress);
+    
+        //Store escrow details in memory
+        EscrowStruct memory currentEscrow;
+        TransactionStruct memory currentTransaction;
+        
+        currentEscrow.buyer = msg.sender;
+        currentEscrow.seller = sellerAddress;
+        currentEscrow.escrow_agent = escrowAddress;
+
+        //Calculates and stores Escrow Fee.
+        currentEscrow.escrow_fee = getEscrowFee(escrowAddress)*msg.value/1000;
+        
+        //0.25% dev fee
+        uint dev_fee = msg.value/400;
+        Funds[admin] += dev_fee;   
+
+        //Amount seller receives = Total amount - 0.25% dev fee - Escrow Fee
+        currentEscrow.amount = msg.value - dev_fee - currentEscrow.escrow_fee;
+
+        //These default to false, no need to set them again
+        /*currentEscrow.escrow_intervention = false;
+        currentEscrow.release_approval = false;
+        currentEscrow.refund_approval = false;  */ 
+        
+        currentEscrow.notes = notes;
+
+        //Links this transaction to Seller and Escrow's list of transactions.
+        currentTransaction.buyer = msg.sender;
+        currentTransaction.buyer_nounce = buyerDatabase[msg.sender].length;
+
+        sellerDatabase[sellerAddress].push(currentTransaction);
+        escrowDatabase[escrowAddress].push(currentTransaction);
+        buyerDatabase[msg.sender].push(currentEscrow);
+        
+        return true;
+
+    }
+
+}
 contract EscrowCompound is Ownable {
 
     event Initiated(string referenceId, address payer, uint256 amount, address payee, address trustedParty, uint256 lastBlock);
