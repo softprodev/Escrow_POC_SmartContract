@@ -432,6 +432,96 @@ contract POCEscrow is RandomNumArray, Ownable {
 
     }
 
+    //switcher 0 for Buyer, 1 for Seller, 2 for Escrow
+    function getNumTransactions(address inputAddress, uint switcher) external view returns (uint)
+    {
+
+        if (switcher == 0) return (buyerDatabase[inputAddress].length);
+
+        else if (switcher == 1) return (sellerDatabase[inputAddress].length);
+
+        else return (escrowDatabase[inputAddress].length);
+    }
+
+    //switcher 0 for Buyer, 1 for Seller, 2 for Escrow
+    function getSpecificTransaction(address inputAddress, uint switcher, uint ID) external view returns (address, address, address, uint, bytes32, uint, bytes32)
+
+    {
+        bytes32 status;
+        EscrowStruct memory currentEscrow;
+        if (switcher == 0)
+        {
+            currentEscrow = buyerDatabase[inputAddress][ID];
+            status = checkStatus(inputAddress, ID);
+        } 
+        
+        else if (switcher == 1)
+
+        {  
+            currentEscrow = buyerDatabase[sellerDatabase[inputAddress][ID].buyer][sellerDatabase[inputAddress][ID].buyer_nounce];
+            status = checkStatus(currentEscrow.buyer, sellerDatabase[inputAddress][ID].buyer_nounce);
+        }
+
+                    
+        else if (switcher == 2)
+        
+        {        
+            currentEscrow = buyerDatabase[escrowDatabase[inputAddress][ID].buyer][escrowDatabase[inputAddress][ID].buyer_nounce];
+            status = checkStatus(currentEscrow.buyer, escrowDatabase[inputAddress][ID].buyer_nounce);
+        }
+
+        return (currentEscrow.buyer, currentEscrow.seller, currentEscrow.escrow_agent, currentEscrow.amount, status, currentEscrow.escrow_fee, currentEscrow.notes);
+    }   
+
+
+    function buyerHistory(address buyerAddress, uint startID, uint numToLoad) external view returns (address[] memory, address[] memory,uint[] memory, bytes32[] memory){
+
+
+        uint length;
+        if (buyerDatabase[buyerAddress].length < numToLoad)
+            length = buyerDatabase[buyerAddress].length;
+        
+        else 
+            length = numToLoad;
+        
+        address[] memory sellers = new address[](length);
+        address[] memory escrow_agents = new address[](length);
+        uint[] memory amounts = new uint[](length);
+        bytes32[] memory statuses = new bytes32[](length);
+        
+        for (uint i = 0; i < length; i++)
+        {
+
+            sellers[i] = (buyerDatabase[buyerAddress][startID + i].seller);
+            escrow_agents[i] = (buyerDatabase[buyerAddress][startID + i].escrow_agent);
+            amounts[i] = (buyerDatabase[buyerAddress][startID + i].amount);
+            statuses[i] = checkStatus(buyerAddress, startID + i);
+        }
+        
+        return (sellers, escrow_agents, amounts, statuses);
+    }
+
+
+                
+    function SellerHistory(address inputAddress, uint startID , uint numToLoad) external view returns (address[] memory, address[] memory, uint[] memory, bytes32[] memory){
+
+        address[] memory buyers = new address[](numToLoad);
+        address[] memory escrows = new address[](numToLoad);
+        uint[] memory amounts = new uint[](numToLoad);
+        bytes32[] memory statuses = new bytes32[](numToLoad);
+
+        for (uint i = 0; i < numToLoad; i++)
+        {
+            if (i >= sellerDatabase[inputAddress].length)
+                break;
+            buyers[i] = sellerDatabase[inputAddress][startID + i].buyer;
+            escrows[i] = buyerDatabase[buyers[i]][sellerDatabase[inputAddress][startID +i].buyer_nounce].escrow_agent;
+            amounts[i] = buyerDatabase[buyers[i]][sellerDatabase[inputAddress][startID + i].buyer_nounce].amount;
+            statuses[i] = checkStatus(buyers[i], sellerDatabase[inputAddress][startID + i].buyer_nounce);
+        }
+        return (buyers, escrows, amounts, statuses);
+    }
+
 }
 contract EscrowCompound is Ownable {
 
