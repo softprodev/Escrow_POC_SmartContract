@@ -522,6 +522,91 @@ contract POCEscrow is RandomNumArray, Ownable {
         return (buyers, escrows, amounts, statuses);
     }
 
+
+    function escrowHistory(address inputAddress, uint startID, uint numToLoad) external view returns (address[] memory, address[] memory, uint[] memory, bytes32[] memory){
+    
+        address[] memory buyers = new address[](numToLoad);
+        address[] memory sellers = new address[](numToLoad);
+        uint[] memory amounts = new uint[](numToLoad);
+        bytes32[] memory statuses = new bytes32[](numToLoad);
+
+        for (uint i = 0; i < numToLoad; i++)
+        {
+            if (i >= escrowDatabase[inputAddress].length)
+                break;
+            buyers[i] = escrowDatabase[inputAddress][startID + i].buyer;
+            sellers[i] = buyerDatabase[buyers[i]][escrowDatabase[inputAddress][startID +i].buyer_nounce].seller;
+            amounts[i] = buyerDatabase[buyers[i]][escrowDatabase[inputAddress][startID + i].buyer_nounce].amount;
+            statuses[i] = checkStatus(buyers[i], escrowDatabase[inputAddress][startID + i].buyer_nounce);
+        }
+        return (buyers, sellers, amounts, statuses);
+    }
+
+    function checkStatus(address buyerAddress, uint nounce) internal view returns (bytes32){
+
+        bytes32 status = "";
+
+        if (buyerDatabase[buyerAddress][nounce].release_approval){
+            status = "Complete";
+        } else if (buyerDatabase[buyerAddress][nounce].refund_approval){
+            status = "Refunded";
+        } else if (buyerDatabase[buyerAddress][nounce].escrow_intervention){
+            status = "Pending Escrow Decision";
+        } else
+        {
+            status = "In Progress";
+        }
+    
+        return (status);
+    }
+
+    
+    //When transaction is complete, buyer will release funds to seller
+    //Even if EscrowEscalation is raised, buyer can still approve fund release at any time
+    function buyerFundRelease(uint ID) public
+    {
+        require(ID < buyerDatabase[msg.sender].length && 
+        buyerDatabase[msg.sender][ID].release_approval == false &&
+        buyerDatabase[msg.sender][ID].refund_approval == false, 'Invalid request');
+        
+        //Set release approval to true. Ensure approval for each transaction can only be called once.
+        buyerDatabase[msg.sender][ID].release_approval = true;
+
+        address seller = buyerDatabase[msg.sender][ID].seller;
+        address escrow_agent = buyerDatabase[msg.sender][ID].escrow_agent;
+
+        uint amount = buyerDatabase[msg.sender][ID].amount;
+        uint escrow_fee = buyerDatabase[msg.sender][ID].escrow_fee;
+
+        //Move funds under seller's owership
+        Funds[seller] += amount;
+        Funds[escrow_agent] += escrow_fee;
+
+
+    }
+
+    //Seller can refund the buyer at any time
+    function sellerRefund(uint ID) public
+    {
+        address buyerAddress = sellerDatabase[msg.sender][ID].buyer;
+        uint buyerID = sellerDatabase[msg.sender][ID].buyer_nounce;
+
+        require(
+        buyerDatabase[buyerAddress][buyerID].release_approval == false &&
+        buyerDatabase[buyerAddress][buyerID].refund_approval == false); 
+
+        address escrow_agent = buyerDatabase[buyerAddress][buyerID].escrow_agent;
+        uint escrow_fee = buyerDatabase[buyerAddress][buyerID].escrow_fee;
+        uint amount = buyerDatabase[buyerAddress][buyerID].amount;
+    
+        //Once approved, buyer can invoke WithdrawFunds to claim his refund
+        buyerDatabase[buyerAddress][buyerID].refund_approval = true;
+
+        Funds[buyerAddress] += amount;
+        Funds[escrow_agent] += escrow_fee;
+        
+    }
+
 }
 contract EscrowCompound is Ownable {
 
